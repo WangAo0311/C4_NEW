@@ -1,0 +1,12 @@
+[2025-04-02 16:26:47] recall: 0.865 precision:0.696 F1:0.771 tau:10 threshold:0.1 epoch:0
+[2025-04-02 17:18:43] recall: 0.886 precision:0.71 F1:0.789 tau:10 threshold:0.1 epoch:1
+[2025-04-02 18:09:24] recall: 0.899 precision:0.722 F1:0.801 tau:10 threshold:0.1 epoch:2
+[2025-04-02 18:59:41] recall: 0.882 precision:0.736 F1:0.803 tau:10 threshold:0.1 epoch:3
+[2025-04-02 19:49:59] recall: 0.898 precision:0.727 F1:0.804 tau:10 threshold:0.0 epoch:4
+[2025-04-02 20:41:55] recall: 0.885 precision:0.735 F1:0.803 tau:10 threshold:0.0 epoch:5
+
+
+
+tau = 10
+
+CUDA_VISIBLE_DEVICES=2,3 python run_con.py   --model_name_or_path microsoft/codebert-base --num_train_epochs 10 --do_test --do_train --do_eval   --model_type roberta   --model_name_or_path microsoft/codebert-base   --test_filename dataset/pair_test.jsonl   --output_dir results_after_finetune/result4 --train_filename dataset/pair_train.jsonl --dev_filename dataset/pair_valid.jsonl --test_filename dataset/pair_test.jsonl

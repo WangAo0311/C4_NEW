@@ -18,16 +18,14 @@ Fine-tuning the library models for language modeling on a text file (GPT, GPT-2,
 GPT and GPT-2 are fine-tuned using a causal language modeling (CLM) loss while BERT and RoBERTa are fine-tuned
 using a masked language modeling (MLM) loss.
 """
-
 from __future__ import absolute_import
-from copy import Error
+#from copy import Error
 import os
 import sys
 from torch.nn.modules.activation import Threshold  
-
 from transformers.tokenization_utils_base import ENCODE_KWARGS_DOCSTRING
-import bleu
-import pickle
+#import bleu
+#import pickle
 import torch
 import json
 import random
@@ -43,17 +41,27 @@ from torch.utils.data import DataLoader, Dataset, SequentialSampler, RandomSampl
 from torch.utils.data.distributed import DistributedSampler
 from transformers import (WEIGHTS_NAME, AdamW, get_linear_schedule_with_warmup,
                           RobertaConfig, RobertaModel, RobertaTokenizer)
-MODEL_CLASSES = {'roberta': (RobertaConfig, RobertaModel, RobertaTokenizer)}
+from transformers import AutoConfig, AutoModel, AutoTokenizer
+from datetime import datetime
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
+MODEL_CLASSES = {
+    #'roberta': (RobertaConfig, RobertaModel, RobertaTokenizer)
+     'auto':(AutoConfig, AutoModel, AutoTokenizer)                
+
+}
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt = '%m/%d/%Y %H:%M:%S',
                     level = logging.INFO)
 logger = logging.getLogger(__name__)
+#log_file_path = os.path.join(args.output_dir, f"log_epoch_train.log")
 
 language_dict = {}
 all_lang_situation = {}
 ####################################################################
-tau = 10
+#tau = 10
+tau = 12
 best_threshold = 0
 ####################################################################
 class Example(object):
@@ -82,11 +90,13 @@ def get_catagory_id(catagory):
         catagory_id = language_dict[catagory]
     return catagory_id
 
-def read_examples(filename):
+def read_examples(filename):    
     """Read examples from filename."""
     examples=[]
     with open(filename,encoding="utf-8") as f:
-        for line in f:
+        for i, line in enumerate(f):
+            if i > 100:
+                break
             line=line.strip()
             js=json.loads(line)
             code1 = ' '.join(js['Code1'].replace('\n', ' ').strip().split())
@@ -170,15 +180,43 @@ def target_process(tokenizer, args, example):
     
     return target_ids,target_mask
 
+# def source_process(tokenizer, args, example, i):
+#     source_tokens = tokenizer.tokenize(example.source[i])[:args.max_source_length-2]
+#     source_tokens =[tokenizer.cls_token]+source_tokens+[tokenizer.sep_token]
+#     source_ids =  tokenizer.convert_tokens_to_ids(source_tokens) 
+#     source_mask = [1] * (len(source_tokens))
+#     padding_length = args.max_source_length - len(source_ids)
+#     source_ids+=[tokenizer.pad_token_id]*padding_length
+#     source_mask+=[0]*padding_length
+#     return source_ids,source_mask
+
 def source_process(tokenizer, args, example, i):
-    source_tokens = tokenizer.tokenize(example.source[i])[:args.max_source_length-2]
-    source_tokens =[tokenizer.cls_token]+source_tokens+[tokenizer.sep_token]
-    source_ids =  tokenizer.convert_tokens_to_ids(source_tokens) 
-    source_mask = [1] * (len(source_tokens))
-    padding_length = args.max_source_length - len(source_ids)
-    source_ids+=[tokenizer.pad_token_id]*padding_length
-    source_mask+=[0]*padding_length
-    return source_ids,source_mask
+    # 让 tokenizer 自动处理截断、加CLS/SEP、padding
+    
+    model_name = args.model_name_or_path.lower()
+    if "unixcoder" in model_name or "codet5p" in model_name:
+        encoded = tokenizer(
+            example.source[i],
+            max_length=args.max_source_length,
+            padding='max_length',
+            truncation=True,
+            return_tensors=None,
+            #mode="<encoder-only>" if "unixcoder" in model_name else None  
+        )
+    else:
+        encoded = tokenizer(
+            example.source[i],
+            max_length=args.max_source_length,
+            padding='max_length',
+            truncation=True,
+            return_tensors=None  # 返回list而不是tensor
+        )
+    # logger.info(f"[source_process] example.source[{i}][:100] = {example.source[i][:100]}")
+    # logger.info(f"[source_process] Encoded input_ids len = {len(encoded['input_ids'])}, should ≤ {args.max_source_length}")
+    # logger.info(f"[source_process] input_ids[:10] = {encoded['input_ids'][:10]}")
+   #logger.info(f"[source_process] Encoded input_ids len = {len(encoded['input_ids'])}")
+    
+    return encoded['input_ids'], encoded['attention_mask']
 
 
 def set_seed(seed=42):
@@ -188,13 +226,90 @@ def set_seed(seed=42):
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     torch.backends.cudnn.deterministic = True
+
+def setup_logger(output_dir):
+    log_file_path = os.path.join(output_dir, "log_epoch_train.log")
+    if not logger.handlers:
+        file_handler = logging.FileHandler(log_file_path)
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(logging.Formatter(
+            fmt='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
+            datefmt='%m/%d/%Y %H:%M:%S'
+        ))
+        logger.setLevel(logging.DEBUG)
+        logger.addHandler(file_handler)
+
+# def get_longformer_cls_embedding(model, input_ids, attention_mask):
+#     if isinstance(model, torch.nn.DataParallel) or isinstance(model, torch.nn.parallel.DistributedDataParallel):
+#         model_to_use = model.module
+#     else:
+#         model_to_use = model
+
+#     global_attention_mask = torch.zeros_like(input_ids)
+#     global_attention_mask[:, 0] = 1
+
+#     outputs = model_to_use(
+#         input_ids,
+#         attention_mask=attention_mask,
+#         global_attention_mask=global_attention_mask
+#     )
+#     return outputs[0][:, 0, :]
+def get_longformer_cls_embedding(model, input_ids, attention_mask, tokenizer):
+    assert input_ids.device == attention_mask.device
+    assert attention_mask.dtype == torch.long
+    assert input_ids.dtype == torch.long
+
+    logger.info(f"📌 input_ids.shape = {input_ids.shape}")
+    logger.info(f"📌 attention_mask.shape = {attention_mask.shape}")
+    logger.info(f"📌 attention_mask.sum(dim=1) = {attention_mask.sum(dim=1)}")
+
+    # sliding_attention_mask 就用 attention_mask 原样
+    sliding_attention_mask = attention_mask.clone()
+
+    # global attention：只对每行的第一个位置设为 1
+    global_attention_mask = torch.zeros_like(attention_mask)
+    global_attention_mask[:, 0] = 1
+
+    # 不推荐全局 attention 掩码全为 1，会影响 longformer 的 sliding attention 效果
+
+    logger.info(f"📌 sliding_attention_mask.sum(dim=1) = {sliding_attention_mask.sum(dim=1)}")
+    logger.info(f"📌 global_attention_mask.sum(dim=1) = {global_attention_mask.sum(dim=1)}")
+
+    model_to_use = model.module if hasattr(model, "module") else model
+
+    try:
+        outputs = model_to_use(
+            input_ids=input_ids,
+            attention_mask=sliding_attention_mask,
+            global_attention_mask=global_attention_mask,
+            output_hidden_states=False
+        )
+    except Exception as e:
+        import traceback
+        logger.error("🔥 Exception traceback:\n" + traceback.format_exc())
+        logger.error(f"🔥 Longformer forward failed. input_ids.shape = {input_ids.shape}")
+        logger.error(f"🔥 input_ids[0][-10:] = {input_ids[0][-10:].tolist()}")
+        logger.error(f"🔥 attention_mask.sum(dim=1) = {attention_mask.sum(dim=1).tolist()}")
+        logger.error(f"🔥 sliding_attention_mask.sum(dim=1) = {sliding_attention_mask.sum(dim=1).tolist()}")
+        logger.error(f"🔥 global_attention_mask.sum(dim=1) = {global_attention_mask.sum(dim=1).tolist()}")
+        raise e
+
+    return outputs[0][:, 0, :]
+
+
+
+
+
+
+
         
 def main():
+    import sys;print("ARGV:", sys.argv)
     parser = argparse.ArgumentParser()
 
     ## Required parameters  
-    parser.add_argument("--model_type", default=None, type=str, required=True,
-                        help="Model type: e.g. roberta")
+    # parser.add_argument("--model_type", default=None, type=str, required=True,
+    #                     help="Model type: e.g. roberta")
     parser.add_argument("--model_name_or_path", default=None, type=str, required=True,
                         help="Path to pre-trained model: e.g. roberta-base" )   
     parser.add_argument("--output_dir", default=None, type=str, required=True,
@@ -263,51 +378,109 @@ def main():
                         help="random seed for initialization")
     # print arguments
     args = parser.parse_args()
-    logger.info(args)
-
+    # make dir if output_dir not exist
+    if os.path.exists(args.output_dir) is False:
+        os.makedirs(args.output_dir)
+    
+    #setup_logger(args.output_dir)
+    if args.local_rank in [-1, 0]:
+        setup_logger(args.output_dir)
+    if args.local_rank in [-1, 0]:
+        logger.info(args)
+    
     # Setup CUDA, GPU & distributed training
-    if args.local_rank == -1 or args.no_cuda:
+    # if args.local_rank == -1 or args.no_cuda:
+    #     device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
+    #     args.n_gpu = torch.cuda.device_count()
+    # if args.local_rank == -1 or args.no_cuda:
+    #     args.n_gpu = torch.cuda.device_count()
+    #     device = torch.device("cuda:0" if torch.cuda.is_available() and not args.no_cuda else "cpu")
+    #     logger.info(f"Using {args.n_gpu} GPUs with DataParallel")
+    # else:  # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
+    #     torch.cuda.set_device(args.local_rank)
+    #     device = torch.device("cuda", args.local_rank)
+    #     torch.distributed.init_process_group(backend='nccl')
+    #     args.n_gpu = 1
+    if args.local_rank == -1:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
         args.n_gpu = torch.cuda.device_count()
-    else:  # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
+    else:
         torch.cuda.set_device(args.local_rank)
         device = torch.device("cuda", args.local_rank)
-        torch.distributed.init_process_group(backend='nccl')
+        dist.init_process_group(backend='nccl')
         args.n_gpu = 1
-    logger.warning("Process rank: %s, device: %s, n_gpu: %s, distributed training: %s",
+    args.device = device
+    if args.local_rank in [-1, 0]:
+        logger.warning("Process rank: %s, device: %s, n_gpu: %s, distributed training: %s",
                     args.local_rank, device, args.n_gpu, bool(args.local_rank != -1))
     args.device = device
     # Set seed
     set_seed(args.seed)
-    # make dir if output_dir not exist
-    if os.path.exists(args.output_dir) is False:
-        os.makedirs(args.output_dir)
-        
-    config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
-    config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path)
-    tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,do_lower_case=args.do_lower_case)
     
+        
+    config_class, model_class, tokenizer_class = MODEL_CLASSES['auto']
+    
+    # config = config_class.from_pretrained(args.config_name if args.config_name else args.model_name_or_path)
+    # tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,do_lower_case=args.do_lower_case)
+    model_name = args.model_name_or_path.lower()
+
+    if "codet5p" in model_name:
+        config = config_class.from_pretrained(
+            args.config_name if args.config_name else args.model_name_or_path,
+            trust_remote_code=True
+        )
+        
+        tokenizer = tokenizer_class.from_pretrained(
+            args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
+            do_lower_case=args.do_lower_case,
+            trust_remote_code=True
+        )
+    else:
+        config = config_class.from_pretrained(
+            args.config_name if args.config_name else args.model_name_or_path
+        )
+        
+        tokenizer = tokenizer_class.from_pretrained(
+            args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
+            do_lower_case=args.do_lower_case
+        )
+    
+
+
     #budild model
-    encoder = model_class.from_pretrained(args.model_name_or_path,config=config)    
-    decoder_layer = nn.TransformerDecoderLayer(d_model=config.hidden_size, nhead=config.num_attention_heads)
-    decoder = nn.TransformerDecoder(decoder_layer, num_layers=6)
-    model=Seq2Seq(encoder=encoder,decoder=decoder,config=config,
-                  beam_size=args.beam_size,max_length=args.max_target_length,
-                  sos_id=tokenizer.cls_token_id,eos_id=tokenizer.sep_token_id)
+    model_name = args.model_name_or_path.lower()
+    if "codet5p" in model_name:
+        model = AutoModel.from_pretrained(
+        args.model_name_or_path,
+        trust_remote_code=True
+        )
+    elif "longformer" in model_name:
+        model = model_class.from_pretrained(args.model_name_or_path, config=config)
+        
+    else:
+        encoder = model_class.from_pretrained(args.model_name_or_path,config=config)    
+        decoder_layer = nn.TransformerDecoderLayer(d_model=config.hidden_size, nhead=config.num_attention_heads)
+        decoder = nn.TransformerDecoder(decoder_layer, num_layers=6)
+        model=Seq2Seq(encoder=encoder,decoder=decoder,config=config,
+                    beam_size=args.beam_size,max_length=args.max_target_length,
+                    sos_id=tokenizer.cls_token_id,eos_id=tokenizer.sep_token_id)
     
     if args.load_model_path is not None:
-        logger.info("reload model from {}".format(args.load_model_path))
+        if args.local_rank in [-1, 0]:
+            logger.info("reload model from {}".format(args.load_model_path))
         model.load_state_dict(torch.load(args.load_model_path))
         
     model.to(device)
-    if args.local_rank != -1:
-        # Distributed training
-        try:
-            from apex.parallel import DistributedDataParallel as DDP
-        except ImportError:
-            raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use distributed and fp16 training.")
+    # if args.local_rank != -1:
+    #     # Distributed training
+    #     try:
+    #         from apex.parallel import DistributedDataParallel as DDP
+    #     except ImportError:
+    #         raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use distributed and fp16 training.")
 
-        model = DDP(model)
+    #     model = DDP(model)
+    if args.local_rank != -1:
+        model = DDP(model, device_ids=[args.local_rank], output_device=args.local_rank)
     elif args.n_gpu > 1:
         # multi-gpu training
         model = torch.nn.DataParallel(model)
@@ -338,22 +511,47 @@ def main():
                                                     num_training_steps=t_total)
     
         #Start training
-        logger.info("***** Running training *****")
-        logger.info("  Num examples = %d", len(train_examples))
-        logger.info("  Batch size = %d", args.train_batch_size)
-        logger.info("  Num epoch = %d", args.num_train_epochs)
-        
+        if args.local_rank in [-1, 0]:
+            logger.info("***** Running training *****")
+            logger.info("  Num examples = %d", len(train_examples))
+            logger.info("  Batch size = %d", args.train_batch_size)
+            logger.info("  Num epoch = %d", args.num_train_epochs)
+            
 
         model.train()
         dev_dataset={}
         nb_tr_examples, nb_tr_steps,global_step,best_bleu,best_loss = 0,0,0,0,1e6
         best_recall, best_precision, best_f1 = 0,0,0
         for epoch in range(args.num_train_epochs):
-            bar = tqdm(train_dataloader,total=len(train_dataloader))
+            #add
+            if isinstance(train_sampler, DistributedSampler):
+                train_sampler.set_epoch(epoch)
+            #adde
+            #bar = tqdm(train_dataloader,total=len(train_dataloader))
+            bar = tqdm(train_dataloader, total=len(train_dataloader)) if args.local_rank in [-1, 0] else train_dataloader
             for idx, batch in enumerate(bar):
-                batch = tuple(t.to(device) for t in batch)
+                # batch = tuple(t.to(device) for t in batch)
+                if args.n_gpu > 1:
+                    batch = tuple(t.to(model.device_ids[0]) for t in batch)
+                else:
+                    batch = tuple(t.to(device) for t in batch)
                 source_ids,source_mask,task1_ids,_,target_ids,target_mask,_,_ = batch
-                sen_vec1, sen_vec2 = model(source_ids=source_ids,source_mask=source_mask,target_ids=target_ids,target_mask=target_mask)
+                #add
+                model_name = args.model_name_or_path.lower()
+                if "codet5p" in model_name:
+                    sen_vec1 = model.module(source_ids, attention_mask=source_mask)
+                    sen_vec2 = model.module(target_ids, attention_mask=target_mask)
+                elif "unixcoder" in model_name:
+                    # sen_vec1 = model.encoder(source_ids, attention_mask=source_mask)[0][:, 0, :]
+                    # sen_vec2 = model.encoder(target_ids, attention_mask=target_mask)[0][:, 0, :]
+                    sen_vec1 = model.module.encoder(source_ids, attention_mask=source_mask)[0][:, 0, :]
+                    sen_vec2 = model.module.encoder(target_ids, attention_mask=target_mask)[0][:, 0, :]
+                #adde
+                elif "longformer" in model_name:
+                    sen_vec1 = get_longformer_cls_embedding(model, source_ids, source_mask, tokenizer)
+                    sen_vec2 = get_longformer_cls_embedding(model, target_ids, target_mask, tokenizer)
+                else:
+                    sen_vec1, sen_vec2 = model(source_ids=source_ids,source_mask=source_mask,target_ids=target_ids,target_mask=target_mask)
                 
 
                 loss_temp = torch.zeros((len(sen_vec1),len(sen_vec1)*2-1),device=device, dtype=torch.float)
@@ -364,7 +562,8 @@ def main():
                         if i == j:
                             continue
                         temp = j
-                        while torch.equal(task1_ids[i], task1_ids[temp]):
+                        # while torch.equal(task1_ids[i], task1_ids[temp]):
+                        while task1_ids[i].item() == task1_ids[temp].item():
                             temp = (temp + 1) % (len(sen_vec1))
                         loss_temp[i][indice] = (nn.CosineSimilarity(dim=0)(sen_vec1[i],sen_vec2[temp]) + 1) * 0.5 * tau
                         indice += 1
@@ -404,10 +603,10 @@ def main():
                     dev_dataset['dev_loss']=eval_examples,eval_data
                 eval_sampler = RandomSampler(eval_data)
                 eval_dataloader = DataLoader(eval_data, sampler=eval_sampler, batch_size=args.eval_batch_size, drop_last=True)
-
-                logger.info("\n***** Running evaluation *****")
-                logger.info("  Num examples = %d", len(eval_examples))
-                logger.info("  Batch size = %d", args.eval_batch_size)
+                if args.local_rank in [-1, 0]:
+                    logger.info("\n***** Running evaluation *****")
+                    logger.info("  Num examples = %d", len(eval_examples))
+                    logger.info("  Batch size = %d", args.eval_batch_size)
 
                 #Start Evaling model
                 model.eval()
@@ -416,11 +615,27 @@ def main():
                 cos_right = []
                 cos_wrong = []
                 for batch in eval_dataloader:
-                    batch = tuple(t.to(device) for t in batch)
+                    if args.n_gpu > 1:
+                        batch = tuple(t.to(model.device_ids[0]) for t in batch)
+                    else:
+                        batch = tuple(t.to(device) for t in batch)
 
                     source_ids,source_mask,target,_,target_ids,target_mask,_,_ = batch           
                     with torch.no_grad():
-                        sen_vec1, sen_vec2= model(source_ids=source_ids,source_mask=source_mask,target_ids=target_ids,target_mask=target_mask)
+                        model_name = args.model_name_or_path.lower()
+                        if "codet5p" in model_name:
+                            sen_vec1 = model.module(source_ids, attention_mask=source_mask)
+                            sen_vec2 = model.module(target_ids, attention_mask=target_mask)
+                        elif "unixcoder" in model_name:
+                            # sen_vec1 = model.encoder(source_ids, attention_mask=source_mask)[0][:, 0, :]
+                            # sen_vec2 = model.encoder(target_ids, attention_mask=target_mask)[0][:, 0, :]
+                            sen_vec1 = model.module.encoder(source_ids, attention_mask=source_mask)[0][:, 0, :]
+                            sen_vec2 = model.module.encoder(target_ids, attention_mask=target_mask)[0][:, 0, :]
+                        elif "longformer" in model_name:
+                            sen_vec1 = get_longformer_cls_embedding(model, source_ids, source_mask, tokenizer)
+                            sen_vec2 = get_longformer_cls_embedding(model, target_ids, target_mask, tokenizer)
+                        else:
+                            sen_vec1, sen_vec2= model(source_ids=source_ids,source_mask=source_mask,target_ids=target_ids,target_mask=target_mask)
                          
                     cos = nn.CosineSimilarity(dim=1)(sen_vec1,sen_vec2)
                     cos_right += cos.tolist()
@@ -447,61 +662,85 @@ def main():
                 temp_error_total = 0
                 temp_total = 0
                 temp_best_threshold = 0
-                for i in tqdm(range(1, 100)):
-                    count = 0
-                    error_count = 0
-                    threshold = i/100
-                    for i in cos_right:
-                        if i >= threshold:
-                            count += 1
-                    total = len(cos_right)
-                    for i in cos_wrong:
-                        if i < threshold:
-                            error_count += 1
-                    error_total = len(cos_wrong)
-                    correct_recall = count/total
-                    if error_total-error_count+count == 0:
-                        continue
-                    precision = count/(error_total-error_count+count) 
-                    if precision+correct_recall == 0:
-                        continue
-                    F1 = 2*precision*correct_recall/(precision+correct_recall)
-                    if F1 > temp_best_f1:
-                        temp_best_f1 = F1
-                        temp_best_recall = correct_recall
-                        temp_best_precision = precision
-                        temp_count = count
-                        temp_error_count = error_count
-                        temp_error_total = error_total
-                        temp_total = total
-                        temp_best_threshold = threshold
+                threshold_log_path = os.path.join(args.output_dir, f"thresholds_epoch{epoch}.tsv")
+                with open(threshold_log_path, "w") as tf:
+                    tf.write("threshold\trecall\tprecision\tF1\n")
+                    for i in tqdm(range(1, 100)):
+                        count = 0
+                        error_count = 0
+                        threshold = i/100
+                        for j in cos_right:
+                            if j >= threshold:
+                                count += 1
+                        total = len(cos_right)
+                        for j in cos_wrong:
+                            if j < threshold:
+                                error_count += 1
+                        error_total = len(cos_wrong)
+                        correct_recall = count/total
+                        if error_total-error_count+count == 0:
+                            continue
+                        precision = count/(error_total-error_count+count) 
+                        if precision+correct_recall == 0:
+                            continue
+                        F1 = 2*precision*correct_recall/(precision+correct_recall)
+                        tf.write(f"{threshold:.2f}\t{correct_recall:.4f}\t{precision:.4f}\t{F1:.4f}\n")
+                        if F1 > temp_best_f1:
+                            temp_best_f1 = F1
+                            temp_best_recall = correct_recall
+                            temp_best_precision = precision
+                            temp_count = count
+                            temp_error_count = error_count
+                            temp_error_total = error_total
+                            temp_total = total
+                            temp_best_threshold = threshold
 
                 #Pring loss of dev dataset    
                 model.train()
                 # eval_loss = eval_loss / tokens_num
-                print("eval_loss", temp_count, temp_error_count, temp_total, temp_error_total)
+                if args.local_rank in [-1, 0]:
+                    logger.info(f"[Epoch {epoch}] cos_right mean: {np.mean(cos_right):.4f}, std: {np.std(cos_right):.4f}")
+                    logger.info(f"[Epoch {epoch}] cos_wrong mean: {np.mean(cos_wrong):.4f}, std: {np.std(cos_wrong):.4f}")
+                train_loss = tr_loss.item() if hasattr(tr_loss, "item") else tr_loss
+                if args.local_rank in [-1, 0]:
+                    logger.info(f"[Epoch {epoch}] train_loss = {train_loss:.6f}")
+
+                    print("eval_loss", temp_count, temp_error_count, temp_total, temp_error_total)
                 
                 result = {'recall': temp_best_recall, 'precision': temp_best_precision, 'F1': temp_best_f1,
                           'global_step': global_step+1, 'threshold': temp_best_threshold,
                           'train_loss': round(tr_loss,5)}
                 for key in sorted(result.keys()):
-                    logger.info("  %s = %s", key, str(result[key]))
-                logger.info("  "+"*"*20)   
+                    if args.local_rank in [-1, 0]:
+                        logger.info("  %s = %s", key, str(result[key]))
+                if args.local_rank in [-1, 0]:
+                    logger.info("  "+"*"*20)   
                 writeresult = 'recall: ' + str(round(temp_best_recall, 3)) + ' precision:' + str(round(temp_best_precision, 3)) + \
                     ' F1:'+str(round(temp_best_f1, 3))+' tau:' + str(tau) + \
                     ' threshold:' + \
-                    str(round(temp_best_threshold, 1)) + \
+                    str(round(temp_best_threshold, 3)) + \
                     ' epoch:'+str(epoch)+'\n'
-                f = open('result.txt','a+')
-                f.write(writeresult)
-                f.close()
+                if args.local_rank in [-1, 0]:
+                    f = open('result.txt','a+')
+                    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    writeresult = f"[{now}] " + writeresult
+                    f.write(writeresult)
+                    f.close()
+                    #adds
+                    resultfile2 = os.path.join(args.output_dir, 'result')
+                    f2 = open(resultfile2,'a+')
+                    f2.write(writeresult)
+                    f2.close()
+
+                #adde
                 #save last checkpoint
                 last_output_dir = os.path.join(args.output_dir, 'checkpoint-last')
                 if not os.path.exists(last_output_dir):
                     os.makedirs(last_output_dir)
                 model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model it-self
                 output_model_file = os.path.join(last_output_dir, str(epoch)+" pytorch_model.bin")
-                torch.save(model_to_save.state_dict(), output_model_file)                    
+                if args.local_rank in [-1, 0]:
+                    torch.save(model_to_save.state_dict(), output_model_file)                    
                 if temp_best_f1 > best_f1:
                     best_f1 = temp_best_f1
                     best_precision = temp_best_precision
@@ -513,14 +752,17 @@ def main():
                         os.makedirs(output_dir)
                     model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model it-self
                     output_model_file = os.path.join(output_dir, "pytorch_model.bin")
-                    torch.save(model_to_save.state_dict(), output_model_file)  
-
-                logger.info("  Best F1:%s", best_f1)
-                logger.info("  "+"*"*20)
-                logger.info("  Recall:%s", best_recall)
-                logger.info("  "+"*"*20)
-                logger.info("  Precision:%s", best_precision)
-                logger.info("  "+"*"*20)
+                    if args.local_rank in [-1, 0]:
+                        torch.save(model_to_save.state_dict(), output_model_file)  
+                if args.local_rank in [-1, 0]:
+                    logger.info("  Best F1:%s", best_f1)
+                    logger.info("  "+"*"*20)
+                    logger.info("  Recall:%s", best_recall)
+                    logger.info("  "+"*"*20)
+                    logger.info("  Precision:%s", best_precision)
+                    logger.info("  "+"*"*20)
+                    logger.info("  Best threshold:%s", best_threshold)
+                    logger.info("  "+"*"*20)
                
     if args.do_test:
         #Eval model with dev dataset
@@ -529,10 +771,10 @@ def main():
         eval_examples, eval_data = prepare_dataset(args, args.test_filename, tokenizer)
         eval_sampler = RandomSampler(eval_data)
         eval_dataloader = DataLoader(eval_data, sampler=eval_sampler, batch_size=args.eval_batch_size, drop_last=True)
-
-        logger.info("\n***** Running test *****")
-        logger.info("  Num examples = %d", len(eval_examples))
-        logger.info("  Batch size = %d", args.eval_batch_size)
+        if args.local_rank in [-1, 0]:
+            logger.info("\n***** Running test *****")
+            logger.info("  Num examples = %d", len(eval_examples))
+            logger.info("  Batch size = %d", args.eval_batch_size)
 
         #Start Evaling model
         model.eval()
@@ -541,10 +783,27 @@ def main():
         cos_wrong = []
         for batch in eval_dataloader:
 
-            batch = tuple(t.to(device) for t in batch)
+            # batch = tuple(t.to(device) for t in batch)
+            if args.n_gpu > 1:
+                batch = tuple(t.to(model.device_ids[0]) for t in batch)
+            else:
+                batch = tuple(t.to(device) for t in batch)
             source_ids,source_mask,target,_,target_ids,target_mask,_,_ = batch           
             with torch.no_grad():
-                sen_vec1, sen_vec2= model(source_ids=source_ids,source_mask=source_mask,target_ids=target_ids,target_mask=target_mask)
+                model_name = args.model_name_or_path.lower()
+                if "codet5p" in model_name:
+                            sen_vec1 = model.module(source_ids, attention_mask=source_mask)
+                            sen_vec2 = model.module(target_ids, attention_mask=target_mask)
+                elif "unixcoder" in model_name:
+                    # sen_vec1 = model.encoder(source_ids, attention_mask=source_mask)[0][:, 0, :]
+                    # sen_vec2 = model.encoder(target_ids, attention_mask=target_mask)[0][:, 0, :]
+                    sen_vec1 = model.module.encoder(source_ids, attention_mask=source_mask)[0][:, 0, :]
+                    sen_vec2 = model.module.encoder(target_ids, attention_mask=target_mask)[0][:, 0, :]
+                elif "longformer" in model_name:
+                    sen_vec1 = get_longformer_cls_embedding(model, source_ids, source_mask, tokenizer)
+                    sen_vec2 = get_longformer_cls_embedding(model, target_ids, target_mask, tokenizer)
+                else:
+                    sen_vec1, sen_vec2= model(source_ids=source_ids,source_mask=source_mask,target_ids=target_ids,target_mask=target_mask)
             
             cos = nn.CosineSimilarity(dim=1)(sen_vec1,sen_vec2)
             cos_right += cos.tolist()
@@ -575,7 +834,9 @@ def main():
         error_count = 0
         if args.do_eval == False:
             best_threshold = 0.32
-        logger.info("using eval_threshold: %s", best_threshold)
+        if args.local_rank in [-1, 0]:
+            logger.info("using eval_threshold: %s", best_threshold)
+
         for i in cos_right:
             if i >= best_threshold:
                 count += 1
@@ -590,60 +851,84 @@ def main():
         result = {'recall': correct_recall, 'precision': precision, 'F1': F1,
                     'threshold': best_threshold}
         for key in sorted(result.keys()):
-            logger.info("  %s = %s", key, str(result[key]))
-
-        logger.info("using best threshold")
-        for i in tqdm(range(1, 100)):
-            count = 0
-            error_count = 0
-            threshold = i/100
-            for i in cos_right:
-                if i >= threshold:
-                    count += 1
-            total = len(cos_right)
-            for i in cos_wrong:
-                if i < threshold:
-                    error_count += 1
-            error_total = len(cos_wrong)
-            correct_recall = count/total
-            if error_total-error_count+count == 0:
-                continue
-            precision = count/(error_total-error_count+count) 
-            F1 = 2*precision*correct_recall/(precision+correct_recall)
-            if F1 > temp_best_f1:
-                temp_best_f1 = F1
-                temp_best_recall = correct_recall
-                temp_best_precision = precision
-                temp_count = count
-                temp_error_count = error_count
-                temp_error_total = error_total
-                temp_total = total
-                best_threshold = threshold
+            if args.local_rank in [-1, 0]:
+                logger.info("  %s = %s", key, str(result[key]))
+        if args.local_rank in [-1, 0]:
+            logger.info("using best threshold")
+        #add
+        threshold_log_path = os.path.join(args.output_dir, "thresholds_test.tsv")
+        with open(threshold_log_path, "w") as tf:
+            tf.write("threshold\trecall\tprecision\tF1\n")
+        # adde
+            for i in tqdm(range(1, 100)):
+                count = 0
+                error_count = 0
+                threshold = i/100
+                for j in cos_right:
+                    if j >= threshold:
+                        count += 1
+                total = len(cos_right)
+                for j in cos_wrong:
+                    if j < threshold:
+                        error_count += 1
+                error_total = len(cos_wrong)
+                correct_recall = count/total
+                if error_total-error_count+count == 0:
+                    continue
+                precision = count/(error_total-error_count+count) 
+                F1 = 2*precision*correct_recall/(precision+correct_recall)
+                #add
+                tf.write(f"{threshold:.2f}\t{correct_recall:.4f}\t{precision:.4f}\t{F1:.4f}\n")
+                #adde
+                if F1 > temp_best_f1:
+                    temp_best_f1 = F1
+                    temp_best_recall = correct_recall
+                    temp_best_precision = precision
+                    temp_count = count
+                    temp_error_count = error_count
+                    temp_error_total = error_total
+                    temp_total = total
+                    best_threshold = threshold
 
         result = {'recall': temp_best_recall, 'precision': temp_best_precision, 'F1': temp_best_f1,
                      'threshold': best_threshold}
         for key in sorted(result.keys()):
-            logger.info("  %s = %s", key, str(result[key]))
-        logger.info("  "+"*"*20)   
+            if args.local_rank in [-1, 0]:
+                logger.info("  %s = %s", key, str(result[key]))
+        if args.local_rank in [-1, 0]:
+            logger.info("  "+"*"*20)   
         writeresult = 'recall: ' + str(round(temp_best_recall, 3)) + ' precision:' + str(round(temp_best_precision, 3)) + \
             ' F1:'+str(round(temp_best_f1, 3))+' tau:' + str(tau) + \
             ' threshold:' + \
-            str(round(best_threshold, 1)) 
-        f = open('result.txt','a+')
-        f.write(writeresult)
-        f.close()
+            str(round(best_threshold, 3)) 
+        if args.local_rank in [-1, 0]:
+            f = open('result.txt','a+')
+            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            writeresult = f"[{now}] " + writeresult
+            f.write(writeresult)
+            f.close()
+            #adds
+            
+            resultfile2 = os.path.join(args.output_dir, 'result')
+            # if not os.path.exists(resultfile2):
+            #     os.makedirs(resultfile2)
+            f2 = open(resultfile2,'a+')
+            f2.write(writeresult)
+            f2.close()
 
-def gen_sen_vec(source_mask, encoder_output):
-    # encoder_output = encoder_output.permute(1,0,2)
-    # encoder output shape [16, 256, 776]
-    output_mask = source_mask.unsqueeze(-1).expand(encoder_output.shape)
-    encoder_output = encoder_output * output_mask
+        #adde
 
-    # acquire the length of each sentence
-    source_lengths = torch.sum(source_mask, dim=1)
-    sentence_vector = torch.sum(encoder_output, dim=1)
-    sentence_vector = sentence_vector / source_lengths.unsqueeze(-1)
-    return sentence_vector
+# def gen_sen_vec(source_mask, encoder_output):
+#     # encoder_output = encoder_output.permute(1,0,2)
+#     # encoder output shape [16, 256, 776]
+#     output_mask = source_mask.unsqueeze(-1).expand(encoder_output.shape)
+#     encoder_output = encoder_output * output_mask
+
+#     # acquire the length of each sentence
+#     source_lengths = torch.sum(source_mask, dim=1)
+#     sentence_vector = torch.sum(encoder_output, dim=1)
+#     sentence_vector = sentence_vector / source_lengths.unsqueeze(-1)
+#     return sentence_vector
 
 def prepare_dataset(args, filename, tokenizer, portion=1):
     train_examples = read_examples(filename)

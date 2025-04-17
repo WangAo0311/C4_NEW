@@ -1,0 +1,6 @@
+[2025-04-10 13:30:23] recall: 0.901 precision:0.896 F1:0.899 tau:12 threshold:0.33 epoch:0
+[2025-04-10 14:48:48] recall: 0.903 precision:0.914 F1:0.908 tau:12 threshold:0.37 epoch:1
+[2025-04-10 16:07:23] recall: 0.906 precision:0.902 F1:0.904 tau:12 threshold:0.29 epoch:2
+[2025-04-10 17:25:41] recall: 0.912 precision:0.919 F1:0.915 tau:12 threshold:0.29 epoch:3
+[2025-04-10 18:44:00] recall: 0.907 precision:0.921 F1:0.914 tau:12 threshold:0.28 epoch:4
+[2025-04-10 18:46:57] recall: 0.916 precision:0.944 F1:0.93 tau:12 threshold:0.28

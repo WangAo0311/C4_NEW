@@ -1,0 +1,15 @@
+**/*.log
+**/*.tsv
+**/*.bin
+
+# 可选：忽略 Jupyter Notebook 输出缓存
+.ipynb_checkpoints/
+
+# 可选：忽略 Python 编译缓存
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 可选：忽略 VSCode 编辑器配置
+.vscode/

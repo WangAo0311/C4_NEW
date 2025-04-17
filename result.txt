@@ -1,0 +1,102 @@
+recall: 1.0 precision:0.5 F1:0.667 tau:10 threshold:0.9[2025-03-31 16:07:31] 
+recall: 1.0 precision:0.5 F1:0.667 tau:12 threshold:0.9
+recall: 0.895 precision:0.706 F1:0.789 tau:12 threshold:0.1 epoch:0
+recall: 0.887 precision:0.738 F1:0.805 tau:12 threshold:0.1 epoch:1
+recall: 0.89 precision:0.736 F1:0.806 tau:12 threshold:0.1 epoch:2
+recall: 0.894 precision:0.734 F1:0.806 tau:12 threshold:0.1 epoch:3
+recall: 0.905 precision:0.731 F1:0.809 tau:12 threshold:0.0 epoch:4
+[2025-03-31 21:02:44] recall: 0.861 precision:0.73 F1:0.79 tau:12 threshold:0.1
+
+recall: 0.905 precision:0.681 F1:0.777 tau:12 threshold:0.1 epoch:0
+recall: 0.91 precision:0.701 F1:0.792 tau:12 threshold:0.1 epoch:1
+
+
+
+[2025-04-01 21:41:53] recall: 0.905 precision:0.681 F1:0.777 tau:12 threshold:0.1 epoch:0
+[2025-04-01 22:29:32] recall: 0.91 precision:0.701 F1:0.792 tau:12 threshold:0.1 epoch:1
+[2025-04-01 23:16:29] recall: 0.892 precision:0.727 F1:0.801 tau:12 threshold:0.1 epoch:2
+[2025-04-02 00:04:08] recall: 0.893 precision:0.733 F1:0.805 tau:12 threshold:0.1 epoch:3
+[2025-04-02 00:51:34] recall: 0.9 precision:0.727 F1:0.805 tau:12 threshold:0.0 epoch:4
+[2025-04-02 01:37:59] recall: 0.911 precision:0.73 F1:0.81 tau:12 threshold:0.0 epoch:5
+[2025-04-02 02:24:00] recall: 0.891 precision:0.736 F1:0.806 tau:12 threshold:0.1 epoch:6
+[2025-04-02 03:10:04] recall: 0.888 precision:0.736 F1:0.805 tau:12 threshold:0.0 epoch:7
+[2025-04-02 03:56:26] recall: 0.895 precision:0.734 F1:0.807 tau:12 threshold:0.0 epoch:8
+[2025-04-02 04:42:40] recall: 0.888 precision:0.739 F1:0.807 tau:12 threshold:0.0 epoch:9
+[2025-04-02 04:44:41] recall: 0.82 precision:0.747 F1:0.782 tau:12 threshold:0.1
+
+
+[2025-04-02 13:55:32] recall: 0.865 precision:0.696 F1:0.771 tau:10 threshold:0.1 epoch:0
+[2025-04-02 14:44:49] recall: 0.886 precision:0.71 F1:0.789 tau:10 threshold:0.1 epoch:1
+[2025-04-02 16:26:47] recall: 0.865 precision:0.696 F1:0.771 tau:10 threshold:0.1 epoch:0
+[2025-04-02 17:18:43] recall: 0.886 precision:0.71 F1:0.789 tau:10 threshold:0.1 epoch:1
+[2025-04-02 18:09:24] recall: 0.899 precision:0.722 F1:0.801 tau:10 threshold:0.1 epoch:2
+[2025-04-02 18:59:41] recall: 0.882 precision:0.736 F1:0.803 tau:10 threshold:0.1 epoch:3
+[2025-04-02 19:49:59] recall: 0.898 precision:0.727 F1:0.804 tau:10 threshold:0.0 epoch:4
+[2025-04-02 20:41:55] recall: 0.885 precision:0.735 F1:0.803 tau:10 threshold:0.0 epoch:5
+[2025-04-02 21:00:26] recall: 1.0 precision:0.5 F1:0.667 tau:10 threshold:0.9[2025-04-02 21:03:27] recall: 1.0 precision:0.5 F1:0.667 tau:10 threshold:0.9[2025-04-02 21:13:34] recall: 1.0 precision:0.5 F1:0.667 tau:10 threshold:0.1[2025-04-02 22:09:52] recall: 0.884 precision:0.685 F1:0.772 tau:10 threshold:0.1 epoch:0
+[2025-04-02 23:01:25] recall: 0.997 precision:0.503 F1:0.669 tau:10 threshold:0.9 epoch:1
+[2025-04-02 23:24:30] recall: 0.888 precision:0.694 F1:0.78 tau:10 threshold:0.1 epoch:0
+[2025-04-02 23:50:32] recall: 1.0 precision:0.5 F1:0.667 tau:10 threshold:0.0 epoch:2
+[2025-04-03 00:13:10] recall: 0.88 precision:0.728 F1:0.797 tau:10 threshold:0.1 epoch:1
+[2025-04-03 00:39:31] recall: 1.0 precision:0.5 F1:0.667 tau:10 threshold:0.0 epoch:3
+[2025-04-03 01:02:06] recall: 0.915 precision:0.724 F1:0.809 tau:10 threshold:0.1 epoch:2
+[2025-04-03 01:27:57] recall: 1.0 precision:0.5 F1:0.667 tau:10 threshold:0.0 epoch:4
+[2025-04-03 01:51:31] recall: 0.879 precision:0.745 F1:0.806 tau:10 threshold:0.1 epoch:3
+[2025-04-03 02:16:31] recall: 1.0 precision:0.5 F1:0.667 tau:10 threshold:0.0 epoch:5
+[2025-04-03 02:41:14] recall: 0.903 precision:0.734 F1:0.809 tau:10 threshold:0.0 epoch:4
+[2025-04-03 03:04:19] recall: 1.0 precision:0.5 F1:0.667 tau:10 threshold:0.0 epoch:6
+[2025-04-03 03:30:18] recall: 0.897 precision:0.741 F1:0.811 tau:10 threshold:0.0 epoch:5
+[2025-04-03 03:32:29] recall: 0.853 precision:0.738 F1:0.792 tau:10 threshold:0.1[2025-04-03 03:53:27] recall: 1.0 precision:0.5 F1:0.667 tau:10 threshold:0.0 epoch:7
+[2025-04-03 04:44:22] recall: 1.0 precision:0.5 F1:0.667 tau:10 threshold:0.0 epoch:8
+[2025-04-03 05:34:50] recall: 1.0 precision:0.5 F1:0.667 tau:10 threshold:0.0 epoch:9
+[2025-04-03 05:37:05] recall: 1.0 precision:0.5 F1:0.667 tau:10 threshold:0.0[2025-04-03 06:28:36] recall: 0.865 precision:0.696 F1:0.771 tau:10 threshold:0.1 epoch:0
+[2025-04-03 07:17:01] recall: 0.886 precision:0.71 F1:0.789 tau:10 threshold:0.1 epoch:1
+[2025-04-03 08:05:14] recall: 0.899 precision:0.722 F1:0.801 tau:10 threshold:0.1 epoch:2
+[2025-04-03 08:52:28] recall: 0.882 precision:0.736 F1:0.803 tau:10 threshold:0.1 epoch:3
+[2025-04-03 09:38:59] recall: 0.898 precision:0.727 F1:0.804 tau:10 threshold:0.0 epoch:4
+[2025-04-03 10:25:59] recall: 0.885 precision:0.735 F1:0.803 tau:10 threshold:0.0 epoch:5
+[2025-04-03 11:13:11] recall: 0.889 precision:0.733 F1:0.803 tau:10 threshold:0.0 epoch:6
+[2025-04-03 12:27:05] recall: 0.874 precision:0.706 F1:0.781 tau:10 threshold:0.1 epoch:0
+[2025-04-03 13:16:29] recall: 1.0 precision:0.5 F1:0.667 tau:10 threshold:0.0 epoch:1
+[2025-04-03 14:04:54] recall: 1.0 precision:0.5 F1:0.667 tau:10 threshold:0.0 epoch:2
+[2025-04-09 18:45:12] recall: 0.897 precision:0.69 F1:0.78 tau:10 threshold:0.1 epoch:0
+[2025-04-09 19:33:28] recall: 0.9 precision:0.714 F1:0.796 tau:10 threshold:0.1 epoch:1
+[2025-04-09 20:20:37] recall: 0.901 precision:0.732 F1:0.808 tau:10 threshold:0.1 epoch:2
+[2025-04-09 21:08:14] recall: 0.903 precision:0.727 F1:0.806 tau:10 threshold:0.1 epoch:3
+[2025-04-09 21:55:59] recall: 0.913 precision:0.73 F1:0.811 tau:10 threshold:0.0 epoch:4
+[2025-04-09 21:58:03] recall: 0.865 precision:0.731 F1:0.792 tau:10 threshold:0.1[2025-04-09 22:10:33] recall: 1.0 precision:0.5 F1:0.667 tau:10 threshold:0.91[2025-04-09 23:37:45] recall: 0.882 precision:0.707 F1:0.785 tau:12 threshold:0.12 epoch:0
+[2025-04-10 00:23:54] recall: 0.919 precision:0.713 F1:0.803 tau:12 threshold:0.06 epoch:1
+[2025-04-10 01:09:31] recall: 0.909 precision:0.723 F1:0.806 tau:12 threshold:0.07 epoch:2
+[2025-04-10 01:55:28] recall: 0.917 precision:0.72 F1:0.807 tau:12 threshold:0.06 epoch:3
+[2025-04-10 02:41:33] recall: 0.89 precision:0.746 F1:0.812 tau:12 threshold:0.09 epoch:4
+[2025-04-10 02:43:38] recall: 0.867 precision:0.73 F1:0.793 tau:12 threshold:0.11[2025-04-10 04:23:41] recall: 0.905 precision:0.878 F1:0.891 tau:12 threshold:0.28 epoch:0
+[2025-04-10 04:35:16] recall: 0.879 precision:0.916 F1:0.897 tau:12 threshold:0.35 epoch:0
+[2025-04-10 05:34:02] recall: 0.91 precision:0.896 F1:0.903 tau:12 threshold:0.28 epoch:1
+[2025-04-10 05:44:49] recall: 0.885 precision:0.925 F1:0.905 tau:12 threshold:0.34 epoch:1
+[2025-04-10 06:44:10] recall: 0.891 precision:0.92 F1:0.905 tau:12 threshold:0.32 epoch:2
+[2025-04-10 06:54:34] recall: 0.881 precision:0.929 F1:0.904 tau:12 threshold:0.34 epoch:2
+[2025-04-10 07:54:31] recall: 0.919 precision:0.904 F1:0.911 tau:12 threshold:0.24 epoch:3
+[2025-04-10 08:04:24] recall: 0.897 precision:0.926 F1:0.911 tau:12 threshold:0.3 epoch:3
+[2025-04-10 09:04:46] recall: 0.912 precision:0.911 F1:0.911 tau:12 threshold:0.24 epoch:4
+[2025-04-10 09:07:41] recall: 0.919 precision:0.935 F1:0.927 tau:12 threshold:0.26[2025-04-10 09:14:13] recall: 0.898 precision:0.924 F1:0.911 tau:12 threshold:0.26 epoch:4
+[2025-04-10 09:17:02] recall: 0.909 precision:0.935 F1:0.922 tau:12 threshold:0.25[2025-04-10 10:30:10] recall: 0.874 precision:0.918 F1:0.896 tau:12 threshold:0.4 epoch:0
+[2025-04-10 11:39:35] recall: 0.904 precision:0.913 F1:0.908 tau:12 threshold:0.3 epoch:1
+[2025-04-10 13:30:23] recall: 0.901 precision:0.896 F1:0.899 tau:12 threshold:0.33 epoch:0
+[2025-04-10 13:41:24] recall: 0.87 precision:0.901 F1:0.885 tau:12 threshold:0.33 epoch:0
+[2025-04-10 14:48:48] recall: 0.903 precision:0.914 F1:0.908 tau:12 threshold:0.37 epoch:1
+[2025-04-10 14:52:55] recall: 0.897 precision:0.904 F1:0.9 tau:12 threshold:0.32 epoch:1
+[2025-04-10 16:07:23] recall: 0.906 precision:0.902 F1:0.904 tau:12 threshold:0.29 epoch:2
+[2025-04-10 16:56:55] recall: 0.886 precision:0.913 F1:0.899 tau:12 threshold:0.4 epoch:0
+[2025-04-10 17:25:41] recall: 0.912 precision:0.919 F1:0.915 tau:12 threshold:0.29 epoch:3
+[2025-04-10 18:27:22] recall: 0.895 precision:0.92 F1:0.908 tau:12 threshold:0.42 epoch:1
+[2025-04-10 18:44:00] recall: 0.907 precision:0.921 F1:0.914 tau:12 threshold:0.28 epoch:4
+[2025-04-10 18:46:57] recall: 0.916 precision:0.944 F1:0.93 tau:12 threshold:0.28[2025-04-10 19:58:12] recall: 0.901 precision:0.923 F1:0.912 tau:12 threshold:0.38 epoch:2
+[2025-04-10 21:29:05] recall: 0.906 precision:0.916 F1:0.911 tau:12 threshold:0.35 epoch:3
+[2025-04-10 23:00:07] recall: 0.897 precision:0.923 F1:0.91 tau:12 threshold:0.34 epoch:4
+[2025-04-10 23:03:52] recall: 0.902 precision:0.945 F1:0.923 tau:12 threshold:0.36[2025-04-16 22:25:51] Test: recall=0.302, precision=0.483, F1=0.372, threshold=0.96
+[2025-04-16 22:33:45] Test: recall=0.317, precision=0.648, F1=0.425, threshold=0.32
+[2025-04-16 22:39:52] Test: recall=0.317, precision=0.648, F1=0.425, threshold=0.32
+[2025-04-16 23:06:35] Test: recall=1.000, precision=0.500, F1=0.667, threshold=0.32
+[2025-04-17 00:13:13] Test: recall=1.000, precision=0.500, F1=0.667, threshold=0.32
+[2025-04-17 00:18:57] Test: recall=1.000, precision=0.500, F1=0.667, threshold=0.32
+[2025-04-17 00:26:54] Test: recall=1.000, precision=0.500, F1=0.667, threshold=0.32

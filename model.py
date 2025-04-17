@@ -48,6 +48,7 @@ class Seq2Seq(nn.Module):
         self.decoder=decoder
         self.config=config
         self.register_buffer("bias", torch.tril(torch.ones(2048, 2048)))
+        #for decoder attention mask?
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.lsm = nn.LogSoftmax(dim=-1)

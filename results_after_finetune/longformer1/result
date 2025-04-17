@@ -1,0 +1,3 @@
+[2025-04-17 00:13:13] Test: recall=1.000, precision=0.500, F1=0.667, threshold=0.32
+[2025-04-17 00:18:57] Test: recall=1.000, precision=0.500, F1=0.667, threshold=0.32
+[2025-04-17 00:26:54] Test: recall=1.000, precision=0.500, F1=0.667, threshold=0.32
