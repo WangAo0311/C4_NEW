@@ -28,7 +28,7 @@ logging.basicConfig(
     datefmt='%m/%d/%Y %H:%M:%S',
     level=logging.INFO
 )
-tau = 12  # 对比学习温度
+tau = 12 
 best_threshold = 0
 
 class Example:
@@ -45,8 +45,8 @@ def read_examples(filename):
     examples = []
     with open(filename, encoding="utf-8") as f:
         for  i, line in enumerate(f):
-            if i > 500:
-                break
+            # if i > 600:
+            #     break
             js = json.loads(line)
             code1 = ' '.join(js['Code1'].strip().split())
             code2 = ' '.join(js['Code2'].strip().split())
@@ -285,7 +285,9 @@ def parse_args():
     parser.add_argument("--no_cuda", action="store_true")
     parser.add_argument("--local_rank", type=int, default=-1)
     parser.add_argument("--seed", type=int, default=42)
-
+    
+    parser.add_argument("--slide_window", action='store_true',
+                    help="Use slide window with attention pooling instead of standard CLS embedding.")
     return parser.parse_args()
 
 
@@ -363,6 +365,8 @@ def main():
             train_dataset,
             sampler=train_sampler,
             batch_size=args.train_batch_size // args.gradient_accumulation_steps,
+            num_workers=4,
+            pin_memory=True,
             drop_last=True
         )
         t_total = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
@@ -390,9 +394,10 @@ def main():
             logger.info("  Num examples = %d", len(train_examples))
             logger.info("  Batch size = %d", args.train_batch_size)
             logger.info("  Num epoch = %d", args.num_train_epochs)
-        model.train()
+        
         nb_tr_examples, nb_tr_steps,global_step,best_bleu,best_loss = 0,0,0,0,1e6
         for epoch in range(args.num_train_epochs):
+            model.train()
             if isinstance(train_sampler, DistributedSampler):
                 train_sampler.set_epoch(epoch)
             bar = tqdm(train_dataloader, total=len(train_dataloader)) if args.local_rank in [-1, 0] else train_dataloader
@@ -416,12 +421,12 @@ def main():
                 for i in range(len(sen_vec1)):
                     loss_temp[i][0] = (nn.CosineSimilarity(dim=0)(sen_vec1[i], sen_vec2[i]) + 1) * 0.5 * tau
                     indice = 1
-                    #print("task_ids2:", [t.item() for t in task_ids],flush=True)
+                    
                     for j in range(len(sen_vec1)):
                         if i == j:
                             continue
                         temp = j
-                        #print("task_ids:", [t.item() for t in task_ids],flush=True)
+                        
                         while task_ids[i].item() == task_ids[temp].item():
                             temp = (temp + 1) % len(sen_vec1)
                         loss_temp[i][indice] = (nn.CosineSimilarity(dim=0)(sen_vec1[i], sen_vec2[temp]) + 1) * 0.5 * tau
@@ -443,91 +448,101 @@ def main():
                 nb_tr_examples += source_ids.size(0)
                 nb_tr_steps += 1
 
-    if args.do_eval:
-        model.eval()
-        #dev_dataset = {}
-        current_epoch = epoch if 'epoch' in locals() else 0
-        threshold_log_path = os.path.join(args.output_dir, f"thresholds_epoch{current_epoch}.tsv")
-       #tr_loss = 0
-        nb_tr_examples, nb_tr_steps = 0, 0
+            if args.do_eval:
+                model.eval()
+                #dev_dataset = {}
+                current_epoch = epoch if 'epoch' in locals() else 0
+                threshold_log_path = os.path.join(args.output_dir, f"thresholds_epoch{current_epoch}.tsv")
+            #tr_loss = 0
+                nb_tr_examples, nb_tr_steps = 0, 0
 
-        if 'dev_loss' in dev_dataset:
-            eval_examples, eval_data = dev_dataset['dev_loss']
-        else:
-            eval_examples = read_examples(args.dev_filename)
-            eval_data = prepare_dataset(eval_examples, tokenizer, args.max_source_length, model_name)
-            dev_dataset['dev_loss'] = (eval_examples, eval_data)
+                if 'dev_loss' in dev_dataset:
+                    eval_examples, eval_data = dev_dataset['dev_loss']
+                else:
+                    eval_examples = read_examples(args.dev_filename)
+                    eval_data = prepare_dataset(eval_examples, tokenizer, args.max_source_length, model_name)
+                    dev_dataset['dev_loss'] = (eval_examples, eval_data)
 
-        eval_sampler = RandomSampler(eval_data) if args.local_rank == -1 else DistributedSampler(eval_data)
-        eval_dataloader = DataLoader(eval_data, sampler=eval_sampler, batch_size=args.eval_batch_size, drop_last=True)
-        if args.local_rank in [-1, 0]:
-                    logger.info("\n***** Running evaluation *****")
-                    logger.info("  Num examples = %d", len(eval_examples))
-                    logger.info("  Batch size = %d", args.eval_batch_size)
-        cos_right, cos_wrong = [], []
-        for batch in eval_dataloader:
-            batch = tuple(t.to(args.device) for t in batch)
-            source_ids, source_mask, target_ids, target_mask, labels, task_ids = batch
-            with torch.no_grad():
-                sen_vec1 = get_sentence_embedding(model, source_ids, source_mask, model_name, tokenizer)
-                sen_vec2 = get_sentence_embedding(model, target_ids, target_mask, model_name, tokenizer)
+                eval_sampler = RandomSampler(eval_data) if args.local_rank == -1 else DistributedSampler(eval_data)
+                eval_dataloader = DataLoader(eval_data, sampler=eval_sampler, batch_size=args.eval_batch_size, drop_last=False)
+                if args.local_rank in [-1, 0]:
+                            logger.info("\n***** Running evaluation *****")
+                            logger.info("  Num examples = %d", len(eval_examples))
+                            logger.info("  Batch size = %d", args.eval_batch_size)
+                cos_right, cos_wrong = [], []
+                for batch in eval_dataloader:
+                    batch = tuple(t.to(args.device) for t in batch)
+                    source_ids, source_mask, target_ids, target_mask, labels, task_ids = batch
+                    with torch.no_grad():
+                        sen_vec1 = get_sentence_embedding(model, source_ids, source_mask, model_name, tokenizer)
+                        sen_vec2 = get_sentence_embedding(model, target_ids, target_mask, model_name, tokenizer)
 
-            cos = nn.CosineSimilarity(dim=1)(sen_vec1, sen_vec2)
-            cos_right += cos.tolist()
+                    cos = nn.CosineSimilarity(dim=1)(sen_vec1, sen_vec2)
+                    cos_right += cos.tolist()
+                    K = 5
 
-            for i in range(len(sen_vec1)):
-                for j in range(len(sen_vec1)):
-                    if i != j and not torch.equal(target_ids[i], target_ids[j]):
-                        cos_wrong.append(nn.CosineSimilarity(dim=0)(sen_vec1[i], sen_vec1[j]).item())
-                        break
+                    for i in range(len(sen_vec1)):
+                        neg_count = 0
+                        for j in range(len(sen_vec1)):
+                            if i==j or torch.equal(target_ids[i], target_ids[j]):
+                                continue
+                            cos_wrong.append(nn.CosineSimilarity(dim=0)(sen_vec1[i], sen_vec1[j]).item())
+                            cos_wrong.append(nn.CosineSimilarity(dim=0)(sen_vec1[i], sen_vec2[j]).item())
+                            neg_count += 1
+                            if neg_count > K:
+                                break
+                threshold_log_path = os.path.join(args.output_dir, f"thresholds_epoch{epoch}.tsv")
+                best_f1, best_precision, best_recall, best_threshold = 0, 0, 0, 0
 
-        threshold_log_path = os.path.join(args.output_dir, f"thresholds_epoch{epoch}.tsv")
-        best_f1, best_precision, best_recall, best_threshold = 0, 0, 0, 0
+                
 
-        with open(threshold_log_path, "w") as tf:
-            tf.write("threshold\trecall\tprecision\tF1\n")
-            for i in range(1, 100):
-                threshold = i / 100
-                tp = sum([1 for s in cos_right if s >= threshold])
-                fp = sum([1 for s in cos_wrong if s >= threshold])
-                fn = len(cos_right) - tp
+                with open(threshold_log_path, "w") as tf:
+                    tf.write("threshold\trecall\tprecision\tF1\n")
+                    for i in range(1, 100):
+                        threshold = i / 100
+                        tp = sum([1 for s in cos_right if s >= threshold])
+                        fp = sum([1 for s in cos_wrong if s >= threshold])
+                        fn = len(cos_right) - tp
 
-                precision = tp / (tp + fp) if tp + fp > 0 else 0
-                recall = tp / (tp + fn) if tp + fn > 0 else 0
-                f1 = 2 * precision * recall / (precision + recall) if precision + recall > 0 else 0
+                        precision = tp / (tp + fp) if tp + fp > 0 else 0
+                        recall = tp / (tp + fn) if tp + fn > 0 else 0
+                        f1 = 2 * precision * recall / (precision + recall) if precision + recall > 0 else 0
 
-                tf.write(f"{threshold:.2f}\t{recall:.4f}\t{precision:.4f}\t{f1:.4f}\n")
+                        tf.write(f"{threshold:.2f}\t{recall:.4f}\t{precision:.4f}\t{f1:.4f}\n")
 
-                if f1 > best_f1:
-                    best_f1 = f1
-                    best_precision = precision
-                    best_recall = recall
-                    best_threshold = threshold
+                        if f1 > best_f1:
+                            best_f1 = f1
+                            best_precision = precision
+                            best_recall = recall
+                            best_threshold = threshold
 
-        if args.local_rank in [-1, 0]:
-            logger.info(f"[Epoch {epoch}] eval: best F1 = {best_f1:.4f}, precision = {best_precision:.4f}, recall = {best_recall:.4f}, threshold = {best_threshold:.2f}")
-
-        # 保存当前 checkpoint
-        checkpoint_dir = os.path.join(args.output_dir, "checkpoint-last")
-        os.makedirs(checkpoint_dir, exist_ok=True)
-        model_to_save = model.module if hasattr(model, 'module') else model
-        torch.save(model_to_save.state_dict(), os.path.join(checkpoint_dir, f"{epoch}_pytorch_model.bin"))
-        if args.local_rank in [-1, 0]:
-                    logger.info("  Best F1:%s", best_f1)
-                    logger.info("  "+"*"*20)
-                    logger.info("  Recall:%s", best_recall)
-                    logger.info("  "+"*"*20)
-                    logger.info("  Precision:%s", best_precision)
-                    logger.info("  "+"*"*20)
-                    logger.info("  Best threshold:%s", best_threshold)
-                    logger.info("  "+"*"*20)
+                if args.local_rank in [-1, 0]:
+                    logger.info(f"[Epoch {epoch}] eval: best F1 = {best_f1:.4f}, precision = {best_precision:.4f}, recall = {best_recall:.4f}, threshold = {best_threshold:.2f}")
+                
+                    result_str = f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [Epoch {epoch}]: recall={best_recall:.3f}, precision={best_precision:.3f}, F1={best_f1:.3f}, threshold={best_threshold:.2f}\n"
+                    with open(os.path.join(args.output_dir, 'result'), 'a+') as f:
+                        f.write(result_str)
+            # 保存当前 checkpoint
+                checkpoint_dir = os.path.join(args.output_dir, "checkpoint-last")
+                os.makedirs(checkpoint_dir, exist_ok=True)
+                model_to_save = model.module if hasattr(model, 'module') else model
+                torch.save(model_to_save.state_dict(), os.path.join(checkpoint_dir, f"{epoch}_pytorch_model.bin"))
+                if args.local_rank in [-1, 0]:
+                            logger.info("  Best F1:%s", best_f1)
+                            logger.info("  "+"*"*20)
+                            logger.info("  Recall:%s", best_recall)
+                            logger.info("  "+"*"*20)
+                            logger.info("  Precision:%s", best_precision)
+                            logger.info("  "+"*"*20)
+                            logger.info("  Best threshold:%s", best_threshold)
+                            logger.info("  "+"*"*20)
 
     if args.do_test:
         model.eval()
         eval_examples = read_examples(args.test_filename)
         eval_data = prepare_dataset(eval_examples, tokenizer, args.max_source_length, model_name)
         eval_sampler = RandomSampler(eval_data)
-        eval_dataloader = DataLoader(eval_data, sampler=eval_sampler, batch_size=args.eval_batch_size, drop_last=True)
+        eval_dataloader = DataLoader(eval_data, sampler=eval_sampler, batch_size=args.eval_batch_size, drop_last=False)
 
         if args.local_rank in [-1, 0]:
             logger.info("\n***** Running test *****")
@@ -544,11 +559,19 @@ def main():
 
             cos = nn.CosineSimilarity(dim=1)(sen_vec1, sen_vec2)
             cos_right += cos.tolist()
-
+            K = 5
             for i in range(len(sen_vec1)):
+                neg_count = 0
                 for j in range(len(sen_vec1)):
-                    if i != j and not torch.equal(target_ids[i], target_ids[j]):
-                        cos_wrong.append(nn.CosineSimilarity(dim=0)(sen_vec1[i], sen_vec1[j]).item())
+                    if i==j:
+                        continue
+                    if torch.equal(target_ids[i], target_ids[j]):
+                        continue 
+                    
+                    cos_wrong.append(nn.CosineSimilarity(dim=0)(sen_vec1[i], sen_vec1[j]).item())
+                    cos_wrong.append(nn.CosineSimilarity(dim=0)(sen_vec1[i], sen_vec2[j]).item())
+                    neg_count += 1
+                    if neg_count > K:
                         break
 
         if not args.do_eval:
